@@ -1,49 +1,49 @@
 -- Bảng Users để lưu thông tin chung của tất cả người dùng
 CREATE TABLE Users (
-    UserID INTEGER PRIMARY KEY AUTOINCREMENT,
-    Username TEXT NOT NULL UNIQUE,
-    Password TEXT NOT NULL,
-    Email TEXT UNIQUE,
-    PhoneNumber TEXT UNIQUE,
-    Role TEXT NOT NULL CHECK (Role IN ('Admin', 'Customer')) -- Phân biệt Admin và Customer
+    UserID INT PRIMARY KEY AUTO_INCREMENT,
+    Username VARCHAR(100) NOT NULL UNIQUE,
+    Password VARCHAR(255) NOT NULL,
+    Email VARCHAR(100) UNIQUE,
+    PhoneNumber VARCHAR(20) UNIQUE,
+    Role ENUM('Admin', 'Customer') NOT NULL
 );
 
 -- Bảng Products để lưu thông tin sản phẩm
 CREATE TABLE Products (
-    ProductID INTEGER PRIMARY KEY AUTOINCREMENT,
-    ProductName TEXT NOT NULL,
+    ProductID INT PRIMARY KEY AUTO_INCREMENT,
+    ProductName VARCHAR(255) NOT NULL,
     Description TEXT,
-    Price REAL NOT NULL,
-    Stock INTEGER NOT NULL -- Số lượng sản phẩm trong kho
+    Price DECIMAL(10,2) NOT NULL,
+    Stock INT NOT NULL
 );
 
--- Bảng Cart để lưu thông tin giỏ hàng của khách hàng
+-- Bảng Cart để lưu thông tin giỏ hàng
 CREATE TABLE Cart (
-    CartID INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserID INTEGER NOT NULL,
-    ProductID INTEGER NOT NULL,
-    Quantity INTEGER NOT NULL,
-    FOREIGN KEY (UserID) REFERENCES Users(UserID),
-    FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
+    CartID INT PRIMARY KEY AUTO_INCREMENT,
+    UserID INT NOT NULL,
+    ProductID INT NOT NULL,
+    Quantity INT NOT NULL,
+    FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE,
+    FOREIGN KEY (ProductID) REFERENCES Products(ProductID) ON DELETE CASCADE
 );
 
 -- Bảng Orders để lưu thông tin đơn hàng
 CREATE TABLE Orders (
-    OrderID INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserID INTEGER NOT NULL,
-    OrderDate DATE NOT NULL DEFAULT (DATE('now')),
-    TotalAmount REAL NOT NULL,
-    Status TEXT NOT NULL CHECK (Status IN ('Pending', 'Completed', 'Cancelled')),
-    FOREIGN KEY (UserID) REFERENCES Users(UserID)
+    OrderID INT PRIMARY KEY AUTO_INCREMENT,
+    UserID INT NOT NULL,
+    OrderDate DATE NOT NULL DEFAULT CURRENT_DATE,
+    TotalAmount DECIMAL(10,2) NOT NULL,
+    Status ENUM('Pending', 'Completed', 'Cancelled') NOT NULL,
+    FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
 );
 
 -- Bảng OrderDetails để lưu chi tiết từng sản phẩm trong đơn hàng
 CREATE TABLE OrderDetails (
-    OrderDetailID INTEGER PRIMARY KEY AUTOINCREMENT,
-    OrderID INTEGER NOT NULL,
-    ProductID INTEGER NOT NULL,
-    Quantity INTEGER NOT NULL,
-    Price REAL NOT NULL,
-    FOREIGN KEY (OrderID) REFERENCES Orders(OrderID),
-    FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
+    OrderDetailID INT PRIMARY KEY AUTO_INCREMENT,
+    OrderID INT NOT NULL,
+    ProductID INT NOT NULL,
+    Quantity INT NOT NULL,
+    Price DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (OrderID) REFERENCES Orders(OrderID) ON DELETE CASCADE,
+    FOREIGN KEY (ProductID) REFERENCES Products(ProductID) ON DELETE CASCADE
 );
