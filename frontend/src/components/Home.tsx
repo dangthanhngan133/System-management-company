@@ -1,121 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ProductDetail from './ProductDetail';
-import TransactionHistory from './TransactionHistory';
-import Checkout from './Checkout';
+import { productService, Product } from '../api/product.service';
+import { authService } from '../api/auth.service';
 import './Home.css';
 
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  image: string;
-  description: string;
-  features: string[];
-  specifications: {
-    [key: string]: string;
-  };
-}
-
 interface Transaction {
-  id: string;
-  date: string;
-  items: {
-    name: string;
-    quantity: number;
-    price: number;
-  }[];
+  id: number;
+  product: Product;
+  quantity: number;
   total: number;
-  status: 'completed' | 'processing' | 'cancelled';
+  date: string;
 }
 
 const Home: React.FC = () => {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [cart, setCart] = useState<Product[]>([]);
+  const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const products: Product[] = [
-    {
-      id: 1,
-      name: "OxiWater Premium",
-      price: 29.99,
-      image: "https://via.placeholder.com/150",
-      description: "Premium water purification system with advanced filtration",
-      features: [
-        "Advanced 5-stage filtration",
-        "Smart monitoring system",
-        "Energy efficient",
-        "Easy maintenance"
-      ],
-      specifications: {
-        "Filter Life": "12 months",
-        "Flow Rate": "2.5 GPM",
-        "Power Consumption": "45W",
-        "Dimensions": "12\" x 8\" x 4\""
-      }
-    },
-    {
-      id: 2,
-      name: "OxiWater Home",
-      price: 19.99,
-      image: "https://via.placeholder.com/150",
-      description: "Home water purification system for daily use",
-      features: [
-        "3-stage filtration",
-        "Compact design",
-        "Quick installation",
-        "Filter change indicator"
-      ],
-      specifications: {
-        "Filter Life": "6 months",
-        "Flow Rate": "2.0 GPM",
-        "Power Consumption": "30W",
-        "Dimensions": "10\" x 6\" x 3\""
-      }
-    },
-    {
-      id: 3,
-      name: "OxiWater Portable",
-      price: 15.99,
-      image: "https://via.placeholder.com/150",
-      description: "Portable water purification bottle for on-the-go",
-      features: [
-        "Built-in filter",
-        "BPA-free material",
-        "500ml capacity",
-        "One-click filter replacement"
-      ],
-      specifications: {
-        "Filter Life": "3 months",
-        "Capacity": "500ml",
-        "Material": "BPA-free plastic",
-        "Weight": "250g"
-      }
-    },
-    {
-      id: 4,
-      name: "OxiWater Industrial",
-      price: 49.99,
-      image: "https://via.placeholder.com/150",
-      description: "Industrial-grade water purification system",
-      features: [
-        "7-stage filtration",
-        "High capacity",
-        "Remote monitoring",
-        "Auto-cleaning system"
-      ],
-      specifications: {
-        "Filter Life": "24 months",
-        "Flow Rate": "5.0 GPM",
-        "Power Consumption": "100W",
-        "Dimensions": "24\" x 16\" x 8\""
-      }
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      setIsLoading(true);
+      const data = await productService.getAllProducts();
+      setProducts(data);
+    } catch (err) {
+      setError('Failed to fetch products');
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
 
   const handleLogout = () => {
+    authService.logout();
     navigate('/login');
   };
 
@@ -124,79 +48,100 @@ const Home: React.FC = () => {
     setActiveSection('product-detail');
   };
 
-  const addToCart = (product: Product) => {
-    setCart([...cart, product]);
+  const handleAddToCart = (product: Product) => {
+    setCart((prevCart) => {
+      const existingItem = prevCart.find((item) => item.product.id === product.id);
+      if (existingItem) {
+        return prevCart.map((item) =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...prevCart, { product, quantity: 1 }];
+    });
   };
 
-  const removeFromCart = (productId: number) => {
-    setCart(cart.filter(item => item.id !== productId));
+  const handleRemoveFromCart = (productId: number) => {
+    setCart((prevCart) => prevCart.filter((item) => item.product.id !== productId));
   };
 
-  const getTotalPrice = () => {
-    return cart.reduce((total, item) => total + item.price, 0).toFixed(2);
+  const handleUpdateQuantity = (productId: number, quantity: number) => {
+    if (quantity < 1) return;
+    setCart((prevCart) =>
+      prevCart.map((item) =>
+        item.product.id === productId ? { ...item, quantity } : item
+      )
+    );
   };
 
-  const handleCheckoutComplete = () => {
-    const newTransaction: Transaction = {
-      id: Math.random().toString(36).substr(2, 9),
-      date: new Date().toLocaleDateString(),
-      items: cart.map(item => ({
-        name: item.name,
-        quantity: 1,
-        price: item.price
-      })),
-      total: parseFloat(getTotalPrice()),
-      status: 'completed'
-    };
-    setTransactions([...transactions, newTransaction]);
+  const calculateTotal = () => {
+    return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+  };
+
+  const handleCheckout = () => {
+    const newTransactions = cart.map((item) => ({
+      id: Date.now(),
+      product: item.product,
+      quantity: item.quantity,
+      total: item.product.price * item.quantity,
+      date: new Date().toISOString(),
+    }));
+    setTransactions((prev) => [...prev, ...newTransactions]);
     setCart([]);
     setActiveSection('transactions');
   };
 
   const renderContent = () => {
+    if (isLoading) {
+      return <div className="loading">Loading...</div>;
+    }
+
+    if (error) {
+      return <div className="error">{error}</div>;
+    }
+
     switch (activeSection) {
       case 'dashboard':
         return (
-          <div className="dashboard-section">
-            <h2>OxiWater Dashboard</h2>
-            <div className="dashboard-stats">
+          <div className="dashboard">
+            <h2>Welcome to Our Store</h2>
+            <div className="stats">
               <div className="stat-card">
                 <h3>Total Products</h3>
                 <p>{products.length}</p>
               </div>
               <div className="stat-card">
-                <h3>Cart Items</h3>
-                <p>{cart.length}</p>
+                <h3>Total Transactions</h3>
+                <p>{transactions.length}</p>
               </div>
               <div className="stat-card">
-                <h3>Total Value</h3>
-                <p>${getTotalPrice()}</p>
+                <h3>Total Revenue</h3>
+                <p>
+                  $
+                  {transactions
+                    .reduce((total, t) => total + t.total, 0)
+                    .toFixed(2)}
+                </p>
               </div>
             </div>
           </div>
         );
       case 'products':
         return (
-          <div className="products-section">
-            <h2>Our Products</h2>
-            <div className="products-grid">
-              {products.map(product => (
-                <div 
-                  key={product.id} 
+          <div className="products">
+            <h2>Products</h2>
+            <div className="product-grid">
+              {products.map((product) => (
+                <div
+                  key={product.id}
                   className="product-card"
                   onClick={() => handleProductClick(product)}
                 >
-                  <img src={product.image} alt={product.name} />
                   <h3>{product.name}</h3>
-                  <p className="product-description">{product.description}</p>
-                  <p className="product-price">${product.price}</p>
-                  <button 
-                    className="add-to-cart-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addToCart(product);
-                    }}
-                  >
+                  <p>${product.price}</p>
+                  <p>Stock: {product.stock}</p>
+                  <button onClick={() => handleAddToCart(product)}>
                     Add to Cart
                   </button>
                 </div>
@@ -206,30 +151,78 @@ const Home: React.FC = () => {
         );
       case 'product-detail':
         return selectedProduct ? (
-          <ProductDetail 
-            products={products}
-            onAddToCart={addToCart}
-          />
+          <div className="product-detail">
+            <h2>{selectedProduct.name}</h2>
+            <p>Price: ${selectedProduct.price}</p>
+            <p>Stock: {selectedProduct.stock}</p>
+            <p>Description: {selectedProduct.description}</p>
+            <div className="features">
+              <h3>Features:</h3>
+              <ul>
+                {selectedProduct.features.map((feature: string, index: number) => (
+                  <li key={index}>{feature}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="specifications">
+              <h3>Specifications:</h3>
+              <ul>
+                {Object.entries(selectedProduct.specifications).map(
+                  ([key, value]) => (
+                    <li key={key}>
+                      <strong>{key}:</strong> {value}
+                    </li>
+                  )
+                )}
+              </ul>
+            </div>
+            <button onClick={() => handleAddToCart(selectedProduct)}>
+              Add to Cart
+            </button>
+            <button onClick={() => setActiveSection('products')}>Back</button>
+          </div>
         ) : null;
       case 'cart':
         return (
-          <div className="cart-section">
+          <div className="cart">
             <h2>Shopping Cart</h2>
             {cart.length === 0 ? (
-              <p className="empty-cart">Your cart is empty</p>
+              <p>Your cart is empty</p>
             ) : (
               <>
                 <div className="cart-items">
-                  {cart.map(item => (
-                    <div key={item.id} className="cart-item">
-                      <img src={item.image} alt={item.name} />
-                      <div className="cart-item-details">
-                        <h3>{item.name}</h3>
-                        <p>${item.price}</p>
+                  {cart.map((item) => (
+                    <div key={item.product.id} className="cart-item">
+                      <h3>{item.product.name}</h3>
+                      <p>${item.product.price}</p>
+                      <div className="quantity-controls">
+                        <button
+                          onClick={() =>
+                            handleUpdateQuantity(
+                              item.product.id,
+                              item.quantity - 1
+                            )
+                          }
+                        >
+                          -
+                        </button>
+                        <span>{item.quantity}</span>
+                        <button
+                          onClick={() =>
+                            handleUpdateQuantity(
+                              item.product.id,
+                              item.quantity + 1
+                            )
+                          }
+                        >
+                          +
+                        </button>
                       </div>
-                      <button 
-                        className="remove-button"
-                        onClick={() => removeFromCart(item.id)}
+                      <p>
+                        Total: ${(item.product.price * item.quantity).toFixed(2)}
+                      </p>
+                      <button
+                        onClick={() => handleRemoveFromCart(item.product.id)}
                       >
                         Remove
                       </button>
@@ -237,46 +230,46 @@ const Home: React.FC = () => {
                   ))}
                 </div>
                 <div className="cart-summary">
-                  <h3>Total: ${getTotalPrice()}</h3>
-                  <button 
-                    className="checkout-button"
-                    onClick={() => setActiveSection('checkout')}
-                  >
-                    Proceed to Checkout
-                  </button>
+                  <h3>Total: ${calculateTotal().toFixed(2)}</h3>
+                  <button onClick={handleCheckout}>Checkout</button>
                 </div>
               </>
             )}
           </div>
         );
-      case 'checkout':
-        return (
-          <Checkout
-            cartItems={cart.map(item => ({ ...item, quantity: 1 }))}
-            total={parseFloat(getTotalPrice())}
-            onCheckoutComplete={handleCheckoutComplete}
-          />
-        );
       case 'transactions':
         return (
-          <TransactionHistory transactions={transactions} />
+          <div className="transactions">
+            <h2>Transaction History</h2>
+            {transactions.length === 0 ? (
+              <p>No transactions yet</p>
+            ) : (
+              <div className="transaction-list">
+                {transactions.map((transaction) => (
+                  <div key={transaction.id} className="transaction-item">
+                    <h3>{transaction.product.name}</h3>
+                    <p>Quantity: {transaction.quantity}</p>
+                    <p>Total: ${transaction.total.toFixed(2)}</p>
+                    <p>Date: {new Date(transaction.date).toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         );
       case 'about':
         return (
-          <div className="about-section">
-            <h2>About OxiWater</h2>
-            <div className="about-content">
-              <p>OxiWater is a leading provider of water purification solutions, committed to delivering clean and safe water for homes and businesses worldwide.</p>
-              <div className="company-values">
-                <h3>Our Values</h3>
-                <ul>
-                  <li>Water Quality</li>
-                  <li>Innovation</li>
-                  <li>Sustainability</li>
-                  <li>Customer Satisfaction</li>
-                </ul>
-              </div>
-            </div>
+          <div className="about">
+            <h2>About Us</h2>
+            <p>
+              Welcome to our store! We offer a wide range of high-quality products
+              at competitive prices. Our mission is to provide the best shopping
+              experience for our customers.
+            </p>
+            <p>
+              If you have any questions or concerns, please don't hesitate to
+              contact us.
+            </p>
           </div>
         );
       default:
@@ -285,66 +278,21 @@ const Home: React.FC = () => {
   };
 
   return (
-    <div className="home-layout">
-      <nav className="sidebar">
-        <div className="company-logo">
-          <h2>OxiWater</h2>
-        </div>
-        <ul className="nav-links">
-          <li 
-            className={activeSection === 'dashboard' ? 'active' : ''} 
-            onClick={() => {
-              setActiveSection('dashboard');
-              setSelectedProduct(null);
-            }}
-          >
-            Dashboard
-          </li>
-          <li 
-            className={activeSection === 'products' ? 'active' : ''} 
-            onClick={() => {
-              setActiveSection('products');
-              setSelectedProduct(null);
-            }}
-          >
-            Products
-          </li>
-          <li 
-            className={activeSection === 'cart' ? 'active' : ''} 
-            onClick={() => {
-              setActiveSection('cart');
-              setSelectedProduct(null);
-            }}
-          >
-            Cart ({cart.length})
-          </li>
-          <li 
-            className={activeSection === 'transactions' ? 'active' : ''} 
-            onClick={() => {
-              setActiveSection('transactions');
-              setSelectedProduct(null);
-            }}
-          >
-            Transactions
-          </li>
-          <li 
-            className={activeSection === 'about' ? 'active' : ''} 
-            onClick={() => {
-              setActiveSection('about');
-              setSelectedProduct(null);
-            }}
-          >
-            About Us
-          </li>
-        </ul>
-        <button 
-          className="logout-button" 
-          onClick={handleLogout}
-        >
-          Logout
+    <div className="home-container">
+      <nav>
+        <button onClick={() => setActiveSection('dashboard')}>Dashboard</button>
+        <button onClick={() => setActiveSection('products')}>Products</button>
+        <button onClick={() => setActiveSection('cart')}>
+          Cart ({cart.length})
         </button>
+        <button onClick={() => setActiveSection('transactions')}>
+          Transactions
+        </button>
+        <button onClick={() => setActiveSection('about')}>About</button>
+        <button onClick={handleLogout}>Logout</button>
       </nav>
-      <main className="main-content">
+
+      <main>
         {renderContent()}
       </main>
     </div>

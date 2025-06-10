@@ -8,6 +8,8 @@ CREATE TABLE Users (
     Role ENUM('Admin', 'Customer') NOT NULL
 );
 
+INSERT INTO Users (Username, Password, Email, PhoneNumber, Role) VALUES ('admin', 'admin', 'admin@gmail.com', '0909090909', 'Admin');
+
 -- Bảng Products để lưu thông tin sản phẩm
 CREATE TABLE Products (
     ProductID INT PRIMARY KEY AUTO_INCREMENT,
